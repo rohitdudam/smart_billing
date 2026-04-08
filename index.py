@@ -6,6 +6,8 @@ import pyttsx3
 import sqlite3
 from datetime import datetime
 import threading
+import os
+from fpdf import FPDF
 
 # Set modern appearance
 ctk.set_appearance_mode("Light") 
@@ -111,11 +113,10 @@ class NexusPro:
         trans_card = ctk.CTkFrame(cards_frame, corner_radius=12, fg_color="white", border_width=1, border_color="#e1e8ed")
         trans_card.pack(side="left", fill="both", expand=True, padx=(0, 15))
 
-        # Manual Entry (Modernized - Fixed Padding logic)
+        # Manual Entry
         m_frame = ctk.CTkFrame(trans_card, fg_color="#f8f9fa", corner_radius=8)
         m_frame.pack(fill="x", padx=15, pady=(15, 5))
         
-        # Inner frame to organize the inputs neatly
         m_inner = tk.Frame(m_frame, bg="#f8f9fa")
         m_inner.pack(padx=15, pady=15)
         
@@ -250,14 +251,74 @@ class NexusPro:
                 del self.cart[idx]; self.bill_tree.delete(row)
                 self.lbl_total.configure(text=f"GRAND TOTAL: ${sum(i['total'] for i in self.cart):.2f}")
 
+    def generate_pdf_receipt(self, dt):
+        pdf = FPDF()
+        pdf.add_page()
+        
+        # Header
+        pdf.set_font("Arial", 'B', 18)
+        pdf.cell(0, 10, txt="Rajendra Gruh Vastu Bhandar", ln=True, align='C')
+        pdf.set_font("Arial", 'I', 12)
+        pdf.cell(0, 10, txt="Payment Receipt", ln=True, align='C')
+        pdf.line(10, 30, 200, 30)
+        
+        # Customer Info
+        pdf.ln(10)
+        pdf.set_font("Arial", size=11)
+        pdf.cell(100, 6, txt=f"Date: {dt}", ln=False)
+        pdf.cell(90, 6, txt=f"Customer: {self.session_customer['name']}", ln=True)
+        pdf.cell(100, 6, txt="", ln=False) # Spacer
+        pdf.cell(90, 6, txt=f"Phone: {self.session_customer['phone']}", ln=True)
+        pdf.ln(5)
+        
+        # Table Header
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(80, 8, txt="Item Name", border=1)
+        pdf.cell(30, 8, txt="Qty", border=1, align='C')
+        pdf.cell(40, 8, txt="Rate", border=1, align='C')
+        pdf.cell(40, 8, txt="Total", border=1, align='C')
+        pdf.ln(8)
+        
+        # Table Body
+        pdf.set_font("Arial", size=11)
+        grand_total = 0
+        for item in self.cart:
+            pdf.cell(80, 8, txt=str(item['name']).capitalize(), border=1)
+            pdf.cell(30, 8, txt=str(item['qty']), border=1, align='C')
+            pdf.cell(40, 8, txt=f"${item['rate']:.2f}", border=1, align='C')
+            pdf.cell(40, 8, txt=f"${item['total']:.2f}", border=1, align='C')
+            pdf.ln(8)
+            grand_total += item['total']
+            
+        # Footer Total
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', 13)
+        pdf.cell(150, 10, txt="GRAND TOTAL: ", border=0, align='R')
+        pdf.cell(40, 10, txt=f"${grand_total:.2f}", border=0, align='C')
+        
+        # Create a safe filename and save
+        safe_name = self.session_customer['name'].replace(' ', '_')
+        safe_date = dt.replace(':', '-').replace(' ', '_')
+        filename = f"Invoice_{safe_name}_{safe_date}.pdf"
+        
+        try:
+            pdf.output(filename)
+            print(f"Receipt saved locally as: {filename}")
+        except Exception as e:
+            messagebox.showerror("PDF Error", f"Could not save receipt: {str(e)}")
+
     def checkout(self):
         if not self.cart: return
         dt = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        # Generate the PDF receipt before database commit and cart clear
+        self.generate_pdf_receipt(dt)
+        
         for i in self.cart:
             self.cur.execute("INSERT INTO sales (customer, item, qty, total, profit, date) VALUES (?,?,?,?,?,?)",
                              (self.session_customer['name'], i['name'], i['qty'], i['total'], i.get('profit', 0), dt))
         self.conn.commit(); self.cart = []; self.ui_billing()
-        self.update_voice_banner("✅ Checkout Successful!", "#2ecc71")
+        self.update_voice_banner("✅ Checkout Successful & PDF Saved!", "#2ecc71")
 
     # --- VOICE CONTROL (Threaded) ---
     def process_voice(self):
@@ -295,7 +356,7 @@ class NexusPro:
             
     def clear_voice_banner(self): self.update_voice_banner("", "transparent")
 
-    # --- INVENTORY & OTHERS (Fully Restored & Modernized) ---
+    # --- INVENTORY & OTHERS ---
     def show_reports(self):
         self.clear_content()
         self.set_active_nav("📊 PROFIT & LOSS")
@@ -311,7 +372,6 @@ class NexusPro:
         self.set_active_nav("📦 INVENTORY")
         ctk.CTkLabel(self.content, text="Inventory Bulk Manager", font=("Segoe UI", 24, "bold"), text_color="#0a3d62").pack(pady=20)
 
-        # Wrap standard frame inside CTkFrame for strict padding rules
         form_wrapper = ctk.CTkFrame(self.content, fg_color="white", corner_radius=10)
         form_wrapper.pack(pady=10, padx=30, fill="x")
         
@@ -370,13 +430,11 @@ class NexusPro:
         self.ov = ctk.CTkFrame(self.root, fg_color="#0a3d62")
         self.ov.place(relx=0, rely=0, relwidth=1, relheight=1)
         
-        # Fixed constructor (No padx/pady here)
         card = ctk.CTkFrame(self.ov, fg_color="white", corner_radius=15)
         card.place(relx=0.5, rely=0.5, anchor="center")
         
-        # Inner layout using standard packing
         inner_frame = tk.Frame(card, bg="white")
-        inner_frame.pack(padx=50, pady=50) # Safe to use padding here
+        inner_frame.pack(padx=50, pady=50) 
         
         ctk.CTkLabel(inner_frame, text="👤", font=("Segoe UI", 40), text_color="#0a3d62").pack(pady=(0, 10))
         ctk.CTkLabel(inner_frame, text="LOGIN", font=("Segoe UI", 18, "bold"), text_color="#0a3d62").pack(pady=(0, 20))
