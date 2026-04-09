@@ -327,25 +327,43 @@ class NexusPro:
         threading.Thread(target=self._voice_worker, daemon=True).start()
 
     def _voice_worker(self):
-        r = sr.Recognizer(); r.pause_threshold = 0.8 
+        r = sr.Recognizer()
+        r.pause_threshold = 0.8 
         with sr.Microphone() as src:
-            r.adjust_for_ambient_noise(src, duration=0.4) 
+            r.adjust_for_ambient_noise(src, duration=0.5) 
             try:
                 aud = r.listen(src, timeout=5, phrase_time_limit=5) 
                 self.root.after(0, self.update_voice_banner, "⚙️ Processing...", "#f39c12")
+                
                 txt = r.recognize_google(aud).lower()
+                print(f"🎤 Voice Heard: {txt}") # Helps debug in VS Code terminal
                 words = txt.split()
+                
                 if "add" in words:
-                    i = words.index("add")
-                    itm = words[i+1]
-                    q = words[words.index("quantity")+1] if "quantity" in words else words[2] if len(words)>3 else "1"
-                    rt = words[words.index("rate")+1] if "rate" in words else words[3] if len(words)>3 else "0"
-                    self.root.after(0, self.process_cart_entry, itm, q, rt)
-                    self.root.after(0, self.update_voice_banner, f"✅ Added: {txt.capitalize()}", "#2ecc71")
-                else: self.root.after(0, self.update_voice_banner, "⚠️ Say 'Add [Item] [Qty] [Rate]'", "#e74c3c")
-            except sr.WaitTimeoutError: self.root.after(0, self.update_voice_banner, "⚠️ Timed out", "#e74c3c")
-            except sr.UnknownValueError: self.root.after(0, self.update_voice_banner, "⚠️ Didn't catch that", "#e74c3c")
-            except Exception as e: print(e)
+                    idx = words.index("add")
+                    remaining_words = words[idx+1:] # Get everything spoken after 'add'
+                    
+                    if len(remaining_words) >= 1:
+                        itm = remaining_words[0]
+                        # Safely grab quantity if spoken, otherwise default to 1
+                        q = remaining_words[1] if len(remaining_words) >= 2 else "1"
+                        # Safely grab rate if spoken, otherwise default to 0
+                        rt = remaining_words[2] if len(remaining_words) >= 3 else "0"
+                        
+                        self.root.after(0, self.process_cart_entry, itm, q, rt)
+                        self.root.after(0, self.update_voice_banner, f"✅ Added: {txt.capitalize()}", "#2ecc71")
+                    else:
+                        self.root.after(0, self.update_voice_banner, "⚠️ Say 'Add [Item]'", "#e74c3c")
+                else: 
+                    self.root.after(0, self.update_voice_banner, "⚠️ Say 'Add [Item] [Qty] [Rate]'", "#e74c3c")
+                    
+            except sr.WaitTimeoutError: 
+                self.root.after(0, self.update_voice_banner, "⚠️ Timed out. Try again.", "#e74c3c")
+            except sr.UnknownValueError: 
+                self.root.after(0, self.update_voice_banner, "⚠️ Didn't catch that.", "#e74c3c")
+            except Exception as e: 
+                print(f"Voice Error: {e}") # Prints exact hardware/audio error to terminal
+                self.root.after(0, self.update_voice_banner, "⚠️ Audio hardware error.", "#e74c3c")
             finally:
                 self.root.after(0, self.mic_btn.configure, {"fg_color": "#0a3d62"})
                 self.root.after(3000, self.clear_voice_banner)
